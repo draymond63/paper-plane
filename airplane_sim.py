@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
+from dataclasses import dataclass, field
 
 
 def as_vector(x=None, y=None, magnitude=None, angle=None):
@@ -18,20 +19,24 @@ def string_vecs(*v, decimals=5):
     return ", ".join([string_vec(vec, decimals) for vec in v])
 
 
+@dataclass
+class Plane:
+    wing_area: float = 0.01
+    mass: float = 0.01
+    inertia: float = 0.0001
+    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.05, 0]))
+
+
 class PlaneSim:
     def __init__(self) -> None:
-        # TODO: Move plane constants into a plane object
+        self.plane = Plane()
         self.g = 9.81  # gravity, m/s^2
         self.rho = 1.225  # air density, kg/m^3
         self.CL_alpha = 2 * np.pi  # lift coefficient per radian
-        self.wing_area = 0.01  # wing area, m^2
-        self.mass = 0.01  # mass, kg
-        self.inertia = 0.0001  # mass moment of inertia, kg*m^2
         self.critical_angle = np.deg2rad(90)  # critical angle of attack, radians
-        self.Fg = as_vector(0, self.mass * -self.g) # Force of gravity
-        self.cop_plane = as_vector(0.05, 0)
-        self.cop_angle_plane = np.arctan2(self.cop_plane[1], self.cop_plane[0]) # TODO: Correcting this removes the swooping :(
-        self.cop_arm_length = np.linalg.norm(self.cop_plane)
+        self.Fg = as_vector(0, self.plane.mass * -self.g) # Force of gravity
+        self.cop_angle_plane = np.arctan2(self.plane.cop[1], self.plane.cop[0]) # TODO: Correcting this removes the swooping :(
+        self.cop_arm_length = np.linalg.norm(self.plane.cop)
 
     # TODO: Should the coefficient of lift be dependent on the angle of attack?
     def get_CL(self, attack_angle):
@@ -47,10 +52,10 @@ class PlaneSim:
         attack_angle = alpha - motion_angle # Angle of attack w.r.t to the direction of motion
         # Lift and Drag calculations
         Fp = self.calc_pressure_forces(speed, motion_angle, attack_angle)
-        dv_dt = (Fp + self.Fg) / self.mass
+        dv_dt = (Fp + self.Fg) / self.plane.mass
         # Torque and angular acceleration
         tau = self.calc_torque(alpha, dalpha_dt, attack_angle, Fp)
-        domega_dt = tau / self.inertia
+        domega_dt = tau / self.plane.inertia
 
         dstate_dt = [vx, vy, dv_dt[0], dv_dt[1], dalpha_dt, domega_dt]
         # if np.any(np.asarray(dstate_dt) > err_limit):
@@ -59,8 +64,8 @@ class PlaneSim:
 
     def calc_pressure_forces(self, speed, motion_angle, attack_angle):
         q = 0.5 * self.rho * speed**2 # Dynamic pressure
-        planform_area = self.wing_area * np.cos(attack_angle) # Projected wing area w.r.t to the direction of motion
-        frontal_area = self.wing_area * np.sin(attack_angle) # Projected wing area w.r.t to the direction of motion
+        planform_area = self.plane.wing_area * np.cos(attack_angle) # Projected wing area w.r.t to the direction of motion
+        frontal_area = self.plane.wing_area * np.sin(attack_angle) # Projected wing area w.r.t to the direction of motion
         # Limit max angle of attack. Too big, and the flow of air over the top of the wing will no longer be smooth and the lift suddenly decreases
         lift = q * planform_area * self.get_CL(attack_angle) if np.abs(attack_angle) <= self.critical_angle else 0
         lift_vec = as_vector(magnitude=lift, angle=np.pi/2 - motion_angle) # Lift is perpendicular to the direction of motion
@@ -75,7 +80,7 @@ class PlaneSim:
         return tau
 
     def calc_rotational_drag(self, dalpha_dt, attack_angle):
-        return 0.5 * self.rho * dalpha_dt**2 * self.wing_area * self.cop_arm_length * self.get_CD(attack_angle) * np.sign(dalpha_dt)
+        return 0.5 * self.rho * dalpha_dt**2 * self.plane.wing_area * self.cop_arm_length * self.get_CD(attack_angle) * np.sign(dalpha_dt)
 
     def run(self, t):
         launch_angle = 0
