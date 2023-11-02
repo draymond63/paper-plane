@@ -21,13 +21,19 @@ class Plane:
     cop: np.ndarray = field(default_factory=lambda: np.asarray([0.001, 0]))
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
+    @classmethod
+    def from_parameters(cls, x1, x2, x3):
+        # TODO: Calculate inertia and wing area and mass from parameters
+        return cls(wing_area=x1, mass=x2, inertia=x3)
+
 
 class PlaneSim:
-    def __init__(self) -> None:
-        self.plane = Plane()
-        self.g = 9.81  # gravity, m/s^2
-        self.rho = 1.225  # air density, kg/m^3
+    def __init__(self, plane=Plane(), g=9.81, air_density=1.225) -> None:
+        self.plane = plane
+        self.g = g  # gravity, m/s^2
+        self.rho = air_density  # air density, kg/m^3
         self.CL_alpha = 2 * np.pi  # lift coefficient per radian
+        self.CD_alpha = 1 / (np.pi * 4)  # drag coefficient per radian
         self.critical_angle = np.deg2rad(90)  # critical angle of attack, radians
         self.Fg = as_vector(0, self.plane.mass * -self.g) # Force of gravity
         self.cop_angle_plane = np.arctan2(self.plane.cop[1], self.plane.cop[0])
@@ -38,7 +44,7 @@ class PlaneSim:
         return self.CL_alpha * np.sin(attack_angle)
 
     def get_CD(self, attack_angle):
-        return 0.01 + self.get_CL(attack_angle)**2 / (np.pi * 4)
+        return 0.01 + self.CD_alpha * self.get_CL(attack_angle)**2
 
     def _ode(self, t, y, err_limit=1e9):
         vx, vy, alpha, dalpha_dt = y[2:]
@@ -65,6 +71,7 @@ class PlaneSim:
         planform_area = self.plane.wing_area * np.cos(attack_angle) # Projected wing area w.r.t to the direction of motion
         frontal_area = self.plane.wing_area * np.sin(attack_angle) # Projected wing area w.r.t to the direction of motion
         # Limit max angle of attack. Too big, and the flow of air over the top of the wing will no longer be smooth and the lift suddenly decreases
+        # TODO: Include critical angle or get rid of it
         lift = q * planform_area * self.get_CL(attack_angle) # if np.abs(attack_angle) <= self.critical_angle else 0
         lift_vec = as_vector(magnitude=lift, angle=np.pi/2 + motion_angle) # Lift is perpendicular to the direction of motion
         drag = q * frontal_area * self.get_CD(attack_angle)
@@ -82,6 +89,7 @@ class PlaneSim:
         # TODO: Should dynamic pressure be a function of speed, not dalpha_dt?
         return np.sign(dalpha_dt) * self.dynamic_pressure(dalpha_dt) * self.plane.wing_area * self.cop_arm_length * self.get_CD(attack_angle)
 
+    # TODO: Make the plane a run parameter, not a initialization parameter
     def run(self, t, height=2, speed=5, launch_angle=0, attack_angle=0):
         """
         Runs the simulation and returns the results as a tuple of numpy arrays
@@ -129,8 +137,8 @@ class PlaneSim:
             motion_angle = np.arctan2(vy, vx)
             attack_angle = alpha - motion_angle
             lift, drag = self.calc_pressure_forces(speed, motion_angle, attack_angle)
-            plt.quiver(x[above_ground], y[above_ground], lift[0][above_ground], lift[1][above_ground], width=0.001, scale=2, angles='xy', scale_units='xy', color='r')
-            plt.quiver(x[above_ground], y[above_ground], drag[0][above_ground], drag[1][above_ground], width=0.001, scale=2, angles='xy', scale_units='xy', color='b')
+            plt.quiver(x[above_ground], y[above_ground], lift[0][above_ground], lift[1][above_ground], width=0.001, scale=1, angles='xy', scale_units='xy', color='r')
+            plt.quiver(x[above_ground] + lift[0][above_ground], y[above_ground] + lift[1][above_ground], drag[0][above_ground], drag[1][above_ground], width=0.001, scale=1, angles='xy', scale_units='xy', color='b')
             legend.extend(['Lift', 'Drag'])
         plt.title('Paper Airplane Flight')
         plt.xlabel('Distance (m)')
@@ -138,6 +146,15 @@ class PlaneSim:
         plt.legend(legend)
         plt.grid(True)
         plt.show()
+
+
+def calc_distance_travelled(plane: Plane, **flight_params):
+    duration = 10 # TODO: Increase duration if error is raised
+    t = np.linspace(0, duration, 201)
+    sim = PlaneSim(plane)
+    x, y, vx, vy, alpha, omega = sim.run(t, **flight_params)
+    above_ground = y >= 0 # TODO: If plane swoops up back into the air, this will be wrong
+    return x[above_ground][-1]
 
 
 if __name__ == "__main__":
