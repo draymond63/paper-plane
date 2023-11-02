@@ -82,13 +82,25 @@ class PlaneSim:
         # TODO: Should dynamic pressure be a function of speed, not dalpha_dt?
         return np.sign(dalpha_dt) * self.dynamic_pressure(dalpha_dt) * self.plane.wing_area * self.cop_arm_length * self.get_CD(attack_angle)
 
-    def run(self, t):
-        launch_angle = 0
-        init_velocity = as_vector(magnitude=5, angle=np.deg2rad(launch_angle))
-        init_attack_angle = 0 # degrees
-        init_height = 2 # meters
-        # Initial conditions: [x_position, y_position, x_velocity, y_velocity, angle_of_attack, angular_velocity]
-        initial_conditions = [0, init_height, init_velocity[0], init_velocity[1], np.deg2rad(init_attack_angle + launch_angle), 0]
+    def run(self, t, height=2, speed=5, launch_angle=0, attack_angle=0):
+        """
+        Runs the simulation and returns the results as a tuple of numpy arrays
+
+        Parameters
+        ----------
+        t : numpy array
+            Time steps to run the simulation at
+        height : float, optional
+            Initial height of the plane (m)
+        speed : float, optional
+            Initial speed of the plane (m/s)
+        launch_angle : float, optional
+            Initial direction of travel (i.e. angle of velocity vector) (degrees, relative to the x-axis)
+        attack_angle : float, optional
+            Initial angle of attack of the plane (degrees, relative to the direction of travel)
+        """
+        init_velocity = as_vector(magnitude=speed, angle=np.deg2rad(launch_angle))
+        initial_conditions = [0, height, *init_velocity, np.deg2rad(attack_angle + launch_angle), 0]
 
         duration = [*t][-1]
         solution = solve_ivp(self._ode, (0, duration), initial_conditions, t_eval=t)
@@ -98,7 +110,7 @@ class PlaneSim:
         land_index = above_ground[-1]
         landed_time = t[land_index]
         if landed_time == duration:
-            raise RuntimeError(f"Didn't land. Started at height of {init_height} meters, ended at height of {y[land_index]:2f} meters")
+            raise RuntimeError(f"Didn't land. Started at height of {height} meters, ended at height of {y[land_index]:2f} meters")
         print(f"Landed after {t[land_index]} seconds")
 
         return solution.y
