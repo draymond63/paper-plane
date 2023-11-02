@@ -12,19 +12,14 @@ def as_vector(x=None, y=None, magnitude=None, angle=None):
         raise ValueError("Must provide either x and y or magnitude and angle")
     return np.asarray([x, y])
 
-def string_vec(v, decimals=5):
-    return f"({v[0]:.{decimals}f}, {v[1]:.{decimals}f})"
-
-def string_vecs(*v, decimals=5):
-    return ", ".join([string_vec(vec, decimals) for vec in v])
-
 
 @dataclass
 class Plane:
     wing_area: float = 0.01
     mass: float = 0.01
     inertia: float = 0.0001
-    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.05, 0]))
+    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.001, 0]))
+    "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
 
 class PlaneSim:
@@ -35,7 +30,7 @@ class PlaneSim:
         self.CL_alpha = 2 * np.pi  # lift coefficient per radian
         self.critical_angle = np.deg2rad(90)  # critical angle of attack, radians
         self.Fg = as_vector(0, self.plane.mass * -self.g) # Force of gravity
-        self.cop_angle_plane = np.arctan2(self.plane.cop[1], self.plane.cop[0]) # TODO: Correcting this removes the swooping :(
+        self.cop_angle_plane = np.arctan2(self.plane.cop[1], self.plane.cop[0])
         self.cop_arm_length = np.linalg.norm(self.plane.cop)
 
     # TODO: Should the coefficient of lift be dependent on the angle of attack?
@@ -71,7 +66,7 @@ class PlaneSim:
         frontal_area = self.plane.wing_area * np.sin(attack_angle) # Projected wing area w.r.t to the direction of motion
         # Limit max angle of attack. Too big, and the flow of air over the top of the wing will no longer be smooth and the lift suddenly decreases
         lift = q * planform_area * self.get_CL(attack_angle) # if np.abs(attack_angle) <= self.critical_angle else 0
-        lift_vec = as_vector(magnitude=lift, angle=np.pi/2 - motion_angle) # Lift is perpendicular to the direction of motion
+        lift_vec = as_vector(magnitude=lift, angle=np.pi/2 + motion_angle) # Lift is perpendicular to the direction of motion
         drag = q * frontal_area * self.get_CD(attack_angle)
         drag_vec = as_vector(magnitude=-drag, angle=motion_angle)
         return lift_vec, drag_vec
@@ -89,7 +84,7 @@ class PlaneSim:
 
     def run(self, t):
         launch_angle = 0
-        init_velocity = as_vector(magnitude=0, angle=np.deg2rad(launch_angle))
+        init_velocity = as_vector(magnitude=5, angle=np.deg2rad(launch_angle))
         init_attack_angle = 0 # degrees
         init_height = 2 # meters
         # Initial conditions: [x_position, y_position, x_velocity, y_velocity, angle_of_attack, angular_velocity]
@@ -115,15 +110,15 @@ class PlaneSim:
         legend = ['Flight path']
         if with_angle:
             direction_vecs = as_vector(magnitude=1, angle=alpha[above_ground])
-            plt.quiver(x[above_ground], y[above_ground], direction_vecs[0], direction_vecs[1], headwidth=1, scale=50)
+            plt.quiver(x[above_ground], y[above_ground], direction_vecs[0], direction_vecs[1], width=0.001, scale=10, angles='xy', scale_units='xy')
             legend.append('Angle of attack')
         if with_forces:
             speed = np.sqrt(vx**2 + vy**2)
             motion_angle = np.arctan2(vy, vx)
             attack_angle = alpha - motion_angle
             lift, drag = self.calc_pressure_forces(speed, motion_angle, attack_angle)
-            plt.quiver(x[above_ground], y[above_ground], lift[0][above_ground], lift[1][above_ground], headwidth=1, scale=2 , color='r')
-            plt.quiver(x[above_ground], y[above_ground], drag[0][above_ground], drag[1][above_ground], headwidth=1, scale=2 , color='b')
+            plt.quiver(x[above_ground], y[above_ground], lift[0][above_ground], lift[1][above_ground], width=0.001, scale=2, angles='xy', scale_units='xy', color='r')
+            plt.quiver(x[above_ground], y[above_ground], drag[0][above_ground], drag[1][above_ground], width=0.001, scale=2, angles='xy', scale_units='xy', color='b')
             legend.extend(['Lift', 'Drag'])
         plt.title('Paper Airplane Flight')
         plt.xlabel('Distance (m)')
@@ -134,7 +129,7 @@ class PlaneSim:
 
 
 if __name__ == "__main__":
-    duration = 2
+    duration = 3
     t = np.linspace(0, duration, 201)
     sim = PlaneSim()
     sim.plot(sim.run(t), with_forces=True)
