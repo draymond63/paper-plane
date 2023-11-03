@@ -18,7 +18,8 @@ class Plane:
     wing_area: float = 0.01
     mass: float = 0.01
     inertia: float = 0.0001
-    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.001, 0]))
+    # TODO: Figure out how to get swooping
+    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.001, 0.01]))
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
     @classmethod
@@ -46,9 +47,9 @@ class PlaneSim:
     def get_CD(self, attack_angle):
         return 0.01 + self.CD_alpha * self.get_CL(attack_angle)**2
 
-    def _ode(self, t, y, err_limit=1e9):
+    def _ode(self, t, y):
         vx, vy, alpha, dalpha_dt = y[2:]
-        speed = np.sqrt(vx**2 + vy**2)
+        speed = np.linalg.norm([vx, vy], axis=0)
         motion_angle = np.arctan2(vy, vx) # Angle of motion w.r.t to the x-axis
         attack_angle = alpha - motion_angle # Angle of attack w.r.t to the direction of motion
         # Lift and Drag calculations
@@ -58,9 +59,7 @@ class PlaneSim:
         tau = self.calc_torque(alpha, dalpha_dt, attack_angle, Fp)
         domega_dt = tau / self.plane.inertia
 
-        dstate_dt = [vx, vy, dv_dt[0], dv_dt[1], dalpha_dt, domega_dt]
-        # if np.any(np.asarray(dstate_dt) > err_limit):
-        #     raise RuntimeError(f"Things accelerated out of control. Reached {dstate_dt}")
+        dstate_dt = [vx, vy, *dv_dt, dalpha_dt, domega_dt]
         return dstate_dt
 
     def dynamic_pressure(self, speed):
@@ -87,10 +86,10 @@ class PlaneSim:
     # Spin-damping moment
     def calc_rotational_drag(self, dalpha_dt, attack_angle):
         # TODO: Should dynamic pressure be a function of speed, not dalpha_dt?
-        return np.sign(dalpha_dt) * self.dynamic_pressure(dalpha_dt) * self.plane.wing_area * self.cop_arm_length * self.get_CD(attack_angle)
+        return np.sign(dalpha_dt) * self.dynamic_pressure(dalpha_dt)**2 * self.plane.wing_area * self.cop_arm_length * self.get_CD(attack_angle)
 
     # TODO: Make the plane a run parameter, not a initialization parameter
-    def run(self, t, height=2, speed=5, launch_angle=0, attack_angle=0):
+    def run(self, t, height=2, speed=5, launch_angle=0, attack_angle=0, must_land=True):
         """
         Runs the simulation and returns the results as a tuple of numpy arrays
 
@@ -114,31 +113,33 @@ class PlaneSim:
         solution = solve_ivp(self._ode, (0, duration), initial_conditions, t_eval=t)
 
         x, y, vx, vy, alpha, omega = solution.y
-        above_ground = np.where(y >= 0)[0]
-        land_index = above_ground[-1]
-        landed_time = t[land_index]
-        if landed_time == duration:
-            raise RuntimeError(f"Didn't land. Started at height of {height} meters, ended at height of {y[land_index]:2f} meters")
-        print(f"Landed after {t[land_index]} seconds")
-
+        below_ground = np.where(y <= 0)[0]
+        if must_land and len(below_ground) == 0:
+            raise RuntimeError(f"Didn't land. Started at height of {height} meters, ended at height of {y[-1]:2f} meters")
+        elif len(below_ground) == 0:
+            print("Didn't land")
+        else:
+            land_index = below_ground[0]
+            print(f"Landed after {t[land_index]} seconds")
         return solution.y
 
     def plot(self, results, with_forces=False, with_angle=True):
         x, y, vx, vy, alpha, omega = results
-        above_ground = y >= 0
-        plt.plot(x[above_ground], y[above_ground])
+        below_ground = np.where(y <= 0)[0]
+        t_end = below_ground[0] if len(below_ground) > 0 else len(y)
+        plt.plot(x[:t_end], y[:t_end])
         legend = ['Flight path']
         if with_angle:
-            direction_vecs = as_vector(magnitude=1, angle=alpha[above_ground])
-            plt.quiver(x[above_ground], y[above_ground], direction_vecs[0], direction_vecs[1], width=0.001, scale=10, angles='xy', scale_units='xy')
+            direction_vecs = as_vector(magnitude=1, angle=alpha[:t_end])
+            plt.quiver(x[:t_end], y[:t_end], direction_vecs[0], direction_vecs[1], width=0.001, scale=10, angles='xy', scale_units='xy')
             legend.append('Angle of attack')
         if with_forces:
-            speed = np.sqrt(vx**2 + vy**2)
+            speed = np.linalg.norm([vx, vy], axis=0)
             motion_angle = np.arctan2(vy, vx)
             attack_angle = alpha - motion_angle
             lift, drag = self.calc_pressure_forces(speed, motion_angle, attack_angle)
-            plt.quiver(x[above_ground], y[above_ground], lift[0][above_ground], lift[1][above_ground], width=0.001, scale=1, angles='xy', scale_units='xy', color='r')
-            plt.quiver(x[above_ground] + lift[0][above_ground], y[above_ground] + lift[1][above_ground], drag[0][above_ground], drag[1][above_ground], width=0.001, scale=1, angles='xy', scale_units='xy', color='b')
+            plt.quiver(x[:t_end], y[:t_end], lift[0][:t_end], lift[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='r')
+            plt.quiver((x + lift[0])[:t_end], (y + lift[1])[:t_end], drag[0][:t_end], drag[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='b')
             legend.extend(['Lift', 'Drag'])
         plt.title('Paper Airplane Flight')
         plt.xlabel('Distance (m)')
@@ -158,7 +159,7 @@ def calc_distance_travelled(plane: Plane, **flight_params):
 
 
 if __name__ == "__main__":
-    duration = 3
-    t = np.linspace(0, duration, 201)
+    duration = 80
+    t = np.linspace(0, duration, 10001)
     sim = PlaneSim()
-    sim.plot(sim.run(t), with_forces=True)
+    sim.plot(sim.run(t, height=20, must_land=False), with_forces=True)
