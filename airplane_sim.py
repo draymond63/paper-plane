@@ -108,22 +108,17 @@ class PlaneSim:
 
         duration = [*t][-1]
         solution = solve_ivp(self._ode, (0, duration), initial_conditions, t_eval=t)
-
-        x, y, vx, vy, alpha, omega = solution.y
-        below_ground = np.where(y <= 0)[0]
-        if must_land and len(below_ground) == 0:
-            raise RuntimeError(f"Didn't land. Started at height of {height} meters, ended at height of {y[-1]:2f} meters")
-        elif len(below_ground) == 0:
-            print("Didn't land")
-        else:
-            land_index = below_ground[0]
-            print(f"Landed after {t[land_index]} seconds (travelled {x[land_index]:.2f} meters)")
         return solution.y
 
     def plot(self, results, with_forces=False, with_angle=True):
         x, y, vx, vy, alpha, omega = results
         below_ground = np.where(y <= 0)[0]
-        t_end = below_ground[0] if len(below_ground) > 0 else len(y)
+        if len(below_ground) == 0:
+            t_end = len(y)
+            print("Didn't land")
+        else:
+            t_end = below_ground[0]
+            print(f"Landed after {t[t_end]:.3f} seconds (travelled {x[t_end]:.2f} meters)")
         plt.plot(x[:t_end], y[:t_end])
         legend = ['Flight path']
         if with_angle:
@@ -146,13 +141,21 @@ class PlaneSim:
         plt.show()
 
 
-def calc_distance_travelled(plane: Plane, **flight_params):
-    duration = 10 # TODO: Increase duration if error is raised
-    t = np.linspace(0, duration, 201)
-    sim = PlaneSim(plane)
-    x, y, vx, vy, alpha, omega = sim.run(t, **flight_params)
-    above_ground = y >= 0 # TODO: If plane swoops up back into the air, this will be wrong
-    return x[above_ground][-1]
+def calc_distance_travelled(plane: Plane, max_attempts=3, init_duration=10, timestep=0.01, height=2, **flight_params):
+    attempts = 0
+    duration = init_duration
+    while attempts < max_attempts:
+        attempts += 1
+        t = np.linspace(0, duration, 1 + round(duration / timestep))
+        sim = PlaneSim(plane)
+        x, y, vx, vy, alpha, omega = sim.run(t, **flight_params)
+        below_ground = np.where(y <= 0)[0]
+        if len(below_ground):
+            land_index = below_ground[0]
+            return x[land_index]
+        end_height_ratio = y[-1] / height
+        duration *= max(1 + end_height_ratio, 1.5)
+    raise RuntimeError("Plane never landed:", plane)
 
 
 if __name__ == "__main__":
