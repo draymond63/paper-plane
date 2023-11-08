@@ -18,8 +18,8 @@ class Plane:
     wing_area: float = 0.01
     mass: float = 0.01
     inertia: float = 0.0001
-    # TODO: Figure out how to get swooping
-    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.001, 0.01]))
+    frontal_area: float = 0.01
+    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.01, 0.1]))
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
     @classmethod
@@ -34,18 +34,14 @@ class PlaneSim:
         self.g = g  # gravity, m/s^2
         self.rho = air_density  # air density, kg/m^3
         self.CL_alpha = 2 * np.pi  # lift coefficient per radian
-        self.CD_alpha = 1 / (np.pi * 4)  # drag coefficient per radian
+        self.CD = 0.01 / (np.pi * 2)  # drag coefficient per radian
         self.critical_angle = np.deg2rad(90)  # critical angle of attack, radians
         self.Fg = as_vector(0, self.plane.mass * -self.g) # Force of gravity
         self.cop_angle_plane = np.arctan2(self.plane.cop[1], self.plane.cop[0])
         self.cop_arm_length = np.linalg.norm(self.plane.cop)
 
-    # TODO: Should the coefficient of lift be dependent on the angle of attack?
     def get_CL(self, attack_angle):
         return self.CL_alpha * np.sin(attack_angle)
-
-    def get_CD(self, attack_angle):
-        return 0.01 + self.CD_alpha * self.get_CL(attack_angle)**2
 
     def _ode(self, t, y):
         vx, vy, alpha, dalpha_dt = y[2:]
@@ -56,7 +52,7 @@ class PlaneSim:
         Fp = np.sum(self.calc_pressure_forces(speed, motion_angle, attack_angle), axis=0)
         dv_dt = (Fp + self.Fg) / self.plane.mass
         # Torque and angular acceleration
-        tau = self.calc_torque(alpha, dalpha_dt, attack_angle, Fp)
+        tau = self.calc_torque(alpha, dalpha_dt, Fp)
         domega_dt = tau / self.plane.inertia
 
         dstate_dt = [vx, vy, *dv_dt, dalpha_dt, domega_dt]
@@ -68,25 +64,26 @@ class PlaneSim:
     def calc_pressure_forces(self, speed, motion_angle, attack_angle):
         q = self.dynamic_pressure(speed) # Dynamic pressure
         planform_area = self.plane.wing_area * np.cos(attack_angle) # Projected wing area w.r.t to the direction of motion
-        frontal_area = self.plane.wing_area * np.sin(attack_angle) # Projected wing area w.r.t to the direction of motion
+        frontal_area = self.plane.wing_area * np.abs(np.sin(attack_angle)) # Projected wing area w.r.t to the direction of motion
+        frontal_area += self.plane.frontal_area * np.abs(np.cos(attack_angle)) # Add the frontal area of the plane
         # Limit max angle of attack. Too big, and the flow of air over the top of the wing will no longer be smooth and the lift suddenly decreases
         # TODO: Include critical angle or get rid of it
         lift = q * planform_area * self.get_CL(attack_angle) # if np.abs(attack_angle) <= self.critical_angle else 0
         lift_vec = as_vector(magnitude=lift, angle=np.pi/2 + motion_angle) # Lift is perpendicular to the direction of motion
-        drag = q * frontal_area * self.get_CD(attack_angle)
+        drag = q * frontal_area * self.CD
         drag_vec = as_vector(magnitude=-drag, angle=motion_angle)
         return lift_vec, drag_vec
 
-    def calc_torque(self, alpha, dalpha_dt, attack_angle, Fp):
+    def calc_torque(self, alpha, dalpha_dt, Fp):
         cop_arm = as_vector(magnitude=self.cop_arm_length, angle=alpha + self.cop_angle_plane) # COP arm position relative to the x-y reference frame
         tau = np.cross(cop_arm, Fp) # Cross product of lift vector and distance from center of mass
-        tau -= self.calc_rotational_drag(dalpha_dt, attack_angle)
+        tau -= self.calc_rotational_drag(dalpha_dt)
         return tau
 
+    # TODO: Should dynamic pressure be a function of speed, not dalpha_dt?
     # Spin-damping moment
-    def calc_rotational_drag(self, dalpha_dt, attack_angle):
-        # TODO: Should dynamic pressure be a function of speed, not dalpha_dt?
-        return np.sign(dalpha_dt) * self.dynamic_pressure(dalpha_dt)**2 * self.plane.wing_area * self.cop_arm_length * self.get_CD(attack_angle)
+    def calc_rotational_drag(self, dalpha_dt):
+        return np.sign(dalpha_dt) * self.dynamic_pressure(dalpha_dt)**2 * self.plane.wing_area * self.cop_arm_length * self.CD
 
     # TODO: Make the plane a run parameter, not a initialization parameter
     def run(self, t, height=2, speed=5, launch_angle=0, attack_angle=0, must_land=True):
@@ -120,7 +117,7 @@ class PlaneSim:
             print("Didn't land")
         else:
             land_index = below_ground[0]
-            print(f"Landed after {t[land_index]} seconds")
+            print(f"Landed after {t[land_index]} seconds (travelled {x[land_index]:.2f} meters)")
         return solution.y
 
     def plot(self, results, with_forces=False, with_angle=True):
@@ -139,7 +136,7 @@ class PlaneSim:
             attack_angle = alpha - motion_angle
             lift, drag = self.calc_pressure_forces(speed, motion_angle, attack_angle)
             plt.quiver(x[:t_end], y[:t_end], lift[0][:t_end], lift[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='r')
-            plt.quiver((x + lift[0])[:t_end], (y + lift[1])[:t_end], drag[0][:t_end], drag[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='b')
+            plt.quiver(x[:t_end], y[:t_end] + 0.2, drag[0][:t_end], drag[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='b')
             legend.extend(['Lift', 'Drag'])
         plt.title('Paper Airplane Flight')
         plt.xlabel('Distance (m)')
@@ -159,7 +156,7 @@ def calc_distance_travelled(plane: Plane, **flight_params):
 
 
 if __name__ == "__main__":
-    duration = 80
-    t = np.linspace(0, duration, 10001)
+    duration = 8
+    t = np.linspace(0, duration, 1001)
     sim = PlaneSim()
-    sim.plot(sim.run(t, height=20, must_land=False), with_forces=True)
+    sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
