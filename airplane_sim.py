@@ -18,7 +18,8 @@ class Plane:
     wing_area: float = 0.01
     mass: float = 0.01
     inertia: float = 0.0001
-    frontal_area: float = 0.01
+    frontal_area: float = 0.0001
+    # CoP at [0.01, 0.1] is CRACKED
     cop: np.ndarray = field(default_factory=lambda: np.asarray([0.01, 0.1]))
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
@@ -155,7 +156,7 @@ def calc_distance_travelled(plane: Plane, max_attempts=3, init_duration=10, time
             return x[land_index]
         end_height_ratio = y[-1] / height
         duration *= max(1 + end_height_ratio, 1.5)
-    raise RuntimeError("Plane never landed:", plane)
+    raise RuntimeError(f"Plane never landed, even after {duration:.2f} seconds:", plane)
 
 
 if __name__ == "__main__":
