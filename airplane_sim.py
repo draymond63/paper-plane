@@ -16,17 +16,37 @@ def as_vector(x=None, y=None, magnitude=None, angle=None):
 @dataclass
 class Plane:
     wing_area: float = 0.01
-    mass: float = 0.01
-    inertia: float = 0.0001
-    frontal_area: float = 0.0001
+    mass: float = 0.01 # Mass of the plane, kg
+    inertia: float = 0.0001 # Moment of inertia, kg*m^2
+    frontal_area: float = 0.0001 # Frontal area of the plane, m^2
     # CoP at [0.01, 0.1] is CRACKED
-    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.01, 0.1]))
+    cop: np.ndarray = field(default_factory=lambda: np.asarray([0.01, 1]))
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
     @classmethod
     def from_parameters(cls, x1, x2, x3):
         # TODO: Calculate inertia and wing area and mass from parameters
-        return cls(wing_area=x1, mass=x2, inertia=x3)
+        # NOTE: where do define constraints/constants (like paper size and mass)?
+        # NOTE: does wing area assume wings are flat? What about angle of wing relative to the plane? This affects moment of inertia
+
+        w = 8.5*0.0254 #paper width (m)
+        l = 11*0.0254 #paper length (m)
+        mass = 0.080*w*l #paper mass (kg)
+
+        x4 = cls.get_tail_edge(x1, x2, x3, w)
+        wing = (w*x3)/2 - (1/2)*((w/2)-x1)*(x3-x4) -x3*((x1+x2)/2) 
+
+        cop = [0, 0] # TODO!
+        return cls(wing_area=wing, mass=x2, inertia=x3, cop=cop)
+
+    @staticmethod
+    def get_tail_edge(x1, x2, x3, w):
+        l1 = w/2 - x1
+        phi = np.arcsin(x1/l1)
+        theta = np.arctan((x2-x1)/x3)
+        alpha = np.pi/4 - phi/2
+        x4 = x3 - l1/np.tan(alpha)
+        return x4
 
 
 class PlaneSim:
