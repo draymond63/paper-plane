@@ -33,19 +33,23 @@ class Plane:
         l = 11*0.0254 #paper length (m)
         mass = 0.080*w*l #paper mass (kg)
 
-        x4 = cls.get_tail_edge(x1, x2, x3, w)
-        wing = (w*x3)/2 - (1/2)*((w/2)-x1)*(x3-x4) -x3*((x1+x2)/2) 
+        x4 = cls.get_tail_edge(x1, x3, w)
+        wing = (w*x3)/2 - (1/2)*((w/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
 
         cop = [0, 0] # TODO!
-        return cls(wing_area=wing, mass=x2, inertia=x3, cop=cop)
+        return cls(wing_area=wing, mass=mass, inertia=x3, cop=cop)
 
     @staticmethod
-    def get_tail_edge(x1, x2, x3, w):
+    def get_tail_edge(x1, x3, w):
         l1 = w/2 - x1
         phi = np.arcsin(x1/l1)
-        theta = np.arctan((x2-x1)/x3)
         alpha = np.pi/4 - phi/2
         x4 = x3 - l1/np.tan(alpha)
+        assert 0 < phi < np.pi/2
+        assert 0 < alpha < np.pi/4
+        assert 0 < x4 < x3
+        assert 0 < x1 < w/2
+        assert 0 < x3
         return x4
 
 
