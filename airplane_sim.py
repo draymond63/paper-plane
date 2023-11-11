@@ -36,21 +36,51 @@ class Plane:
         x4 = cls.get_tail_edge(x1, x3, w)
         wing = (w*x3)/2 - (1/2)*((w/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
 
-        cop = [0, 0] # TODO!
+        cop = cls.get_centre_of_pressure(x1, x2, x3, x4, w)
         return cls(wing_area=wing, mass=mass, inertia=x3, cop=cop)
 
     @staticmethod
     def get_tail_edge(x1, x3, w):
         l1 = w/2 - x1
-        phi = np.arcsin(x1/l1)
-        alpha = np.pi/4 - phi/2
+        alpha = Plane.get_alpha(x1, w)
         x4 = x3 - l1/np.tan(alpha)
-        assert 0 < phi < np.pi/2
-        assert 0 < alpha < np.pi/4
         assert 0 < x4 < x3
         assert 0 < x1 < w/2
         assert 0 < x3
         return x4
+
+    @staticmethod
+    def get_centre_of_pressure(x1, x2, x3, x4, w):
+        bleeding_edge = np.linalg.norm([w/2 - x1, x3 - x4]) # Length of the bleeding edge of the wing
+        spine = np.linalg.norm([x3, x2 - x1]) # Length of the spine of the plane
+        theta = np.arctan((x2 - x1)/x3) # Pitch of the wing, from the front of the plane
+        alpha = Plane.get_alpha(x1, w) # Bleeding edge angle of the wing
+        beta = alpha - theta
+        sm = bleeding_edge*np.sin(beta) # Max wing span of the plane
+        xm = spine - np.arccos(beta) * bleeding_edge # Position of the max wing span, relative to the spine
+        t = w/2 - x2 # Tail width
+        zeta = np.pi/2 - alpha + beta
+        s0 = t / np.sin(zeta) # Width of the wing at x' = 0, where x' is relative to the spine
+        tl = t * np.sin(alpha - beta) # How much the tail protrudes from the back of the plane
+        # Position calculation for the geometric center of the wing, based on the geometry
+        xp_prime = -s0*(tl**2)/6 + (sm/3 + s0/6)*(xm**2) + (spine*(xm**2)/2 - (xm**3)/3 - (spine**3)/6)*sm/(xm-spine)
+        xp_prime /= (s0*tl + sm*xm + s0*xm)/2 + (spine*xm - (spine**2 + xm**2)/2) * sm/(xm-spine)
+        # xp_prime is relative to the angle of the spine of the plane, it needs to be rotated into the x-y reference frame
+        xp_inv = (spine - xp_prime)*np.cos(theta)
+        yp = x1 + xp_inv*np.tan(theta)
+        # xp_inv is now rotated, but relative to the nose, not the tail
+        xp = x3 - xp_inv
+        # TODO: Subtract COM coordinates
+        return [xp, yp]
+
+    @staticmethod
+    def get_alpha(x1, w):
+        l1 = w/2 - x1
+        phi = np.arcsin(x1/l1)
+        alpha = np.pi/4 - phi/2
+        assert 0 < phi < np.pi/2
+        assert 0 < alpha < np.pi/4
+        return alpha
 
 
 class PlaneSim:
@@ -184,7 +214,9 @@ def calc_distance_travelled(plane: Plane, max_attempts=3, init_duration=10, time
 
 
 if __name__ == "__main__":
-    duration = 8
-    t = np.linspace(0, duration, 1001)
-    sim = PlaneSim()
-    sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
+    # duration = 8
+    # t = np.linspace(0, duration, 1001)
+    # sim = PlaneSim()
+    # sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
+
+    plane = Plane.from_parameters(0.018, 0.05, 0.17)
