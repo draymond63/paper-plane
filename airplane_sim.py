@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 from dataclasses import dataclass, field
 
+INCHES_TO_METRES = 0.0254
+PAPER_WIDTH = 8.5 * INCHES_TO_METRES
+PAPER_LENGTH = 11 * INCHES_TO_METRES
+
 
 def as_vector(x=None, y=None, magnitude=None, angle=None):
     if magnitude is not None and angle is not None:
@@ -24,19 +28,16 @@ class Plane:
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
 
     @classmethod
-    def from_parameters(cls, x1, x2, x3):
+    def from_parameters(cls, x1, x2, x3, density=0.080):
+        assert 0 < x3 <= PAPER_LENGTH, f"x3 ({x3}) must be less than the length of the paper ({PAPER_LENGTH})"
+        assert 0 <= x1 <= PAPER_WIDTH/2, f"x1 ({x1}) must be postive and less than half the width of the paper ({PAPER_WIDTH/2})"
         # TODO: Calculate inertia and wing area and mass from parameters
-        # NOTE: where do define constraints/constants (like paper size and mass)?
         # NOTE: does wing area assume wings are flat? What about angle of wing relative to the plane? This affects moment of inertia
+        mass = density*PAPER_WIDTH*PAPER_LENGTH #paper mass (kg)
 
-        w = 8.5*0.0254 #paper width (m)
-        l = 11*0.0254 #paper length (m)
-        mass = 0.080*w*l #paper mass (kg)
-
-        x4 = cls.get_tail_edge(x1, x3, w)
-        wing = (w*x3)/2 - (1/2)*((w/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
-
-        cop = cls.get_centre_of_pressure(x1, x2, x3, x4, w)
+        x4 = cls.get_tail_edge(x1, x3, PAPER_WIDTH)
+        wing = (PAPER_WIDTH*x3)/2 - (1/2)*((PAPER_WIDTH/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
+        cop = cls.get_centre_of_pressure(x1, x2, x3, x4, PAPER_WIDTH)
         return cls(wing_area=wing, mass=mass, inertia=x3, cop=cop)
 
     @staticmethod
@@ -44,9 +45,8 @@ class Plane:
         l1 = w/2 - x1
         alpha = Plane.get_alpha(x1, w)
         x4 = x3 - l1/np.tan(alpha)
-        assert 0 < x4 < x3
-        assert 0 < x1 < w/2
-        assert 0 < x3
+        assert 0 <= x4, f"Length of plane ({x3}) is too small: there won't be a tail edge!. Must be at least {l1/np.tan(alpha)} for the current x1 ({x1})"
+        assert x4 <= x3, f"Tail edge ({x4:5f}) must be less than the length of the plane ({x3})."
         return x4
 
     @staticmethod
@@ -78,8 +78,8 @@ class Plane:
         l1 = w/2 - x1
         phi = np.arcsin(x1/l1)
         alpha = np.pi/4 - phi/2
-        assert 0 < phi < np.pi/2
-        assert 0 < alpha < np.pi/4
+        assert 0 <= phi <= np.pi/2
+        assert 0 <= alpha <= np.pi/4
         return alpha
 
 
@@ -196,8 +196,9 @@ class PlaneSim:
         plt.show()
 
 
-def calc_distance_travelled(plane: Plane, max_attempts=3, init_duration=10, timestep=0.01, height=2, **flight_params):
+def calc_distance_travelled(*parameters, max_attempts=3, init_duration=10, timestep=0.01, height=2, **flight_params):
     attempts = 0
+    plane = Plane.from_parameters(*parameters)
     duration = init_duration
     while attempts < max_attempts:
         attempts += 1
@@ -220,3 +221,4 @@ if __name__ == "__main__":
     # sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
 
     plane = Plane.from_parameters(0.018, 0.05, 0.17)
+    
