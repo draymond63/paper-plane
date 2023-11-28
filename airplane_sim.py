@@ -31,14 +31,12 @@ class Plane:
     def from_parameters(cls, x1, x2, x3, density=0.080):
         assert 0 < x3 <= PAPER_LENGTH, f"x3 ({x3}) must be less than the length of the paper ({PAPER_LENGTH})"
         assert 0 <= x1 <= PAPER_WIDTH/2, f"x1 ({x1}) must be postive and less than half the width of the paper ({PAPER_WIDTH/2})"
-        # TODO: Calculate inertia and wing area and mass from parameters
         # NOTE: does wing area assume wings are flat? What about angle of wing relative to the plane? This affects moment of inertia
         mass = density*PAPER_WIDTH*PAPER_LENGTH #paper mass (kg)
-
         x4 = cls.get_tail_edge(x1, x3, PAPER_WIDTH)
         wing = cls.get_wing_area(x1, x2, x3, x4)
         cop = cls.get_centre_of_pressure(x1, x2, x3, x4, PAPER_WIDTH)
-        com = cls.get_centre_of_mass(x1, x2, x3, x4, PAPER_WIDTH, PAPER_LENGTH)
+        com = cls.get_centre_of_mass(x1, x2, x3, wing, PAPER_WIDTH, PAPER_LENGTH)
         inertia = cls.get_inertia(x1, x2, x3, mass)
         return cls(wing_area=wing, mass=mass, inertia=inertia, cop=cop - com)
 
@@ -52,7 +50,7 @@ class Plane:
         return m * (x3**2 + (np.mean([x1, x2]))**2) / 12
 
     @staticmethod
-    def get_centre_of_mass(x1, x2, x3, x4, w, l) -> np.ndarray:
+    def get_centre_of_mass(x1, x2, x3, wing_area, w, l) -> np.ndarray:
         tail_len = 2*x3 - l
         nose_len = l - x3
         assert 0 < tail_len, f"Length of plane ({l}) is too small: there won't be a tail!. x3 ({x3}) must be at least {l/2}"
@@ -60,10 +58,9 @@ class Plane:
         middle_height = len_ratio*x2 + (1-len_ratio)*x1
         tail_wing_com = [tail_len/2, np.mean([x2, middle_height])]
         wing_area_ratio = tail_len * (w/2 - x2) / ((w/2 - x2) * nose_len / 2) # Tail wing area / nose wing area
-        wing = Plane.get_wing_area(x1, x2, x3, x4)
-        tail_wing_area = wing / (1 + wing_area_ratio)
+        tail_wing_area = wing_area / (1 + wing_area_ratio)
         nose_wing_com = [tail_len + nose_len/3, 2*middle_height/3 + x1/3]
-        nose_wing_area = wing - tail_wing_area
+        nose_wing_area = wing_area - tail_wing_area
         tail_com = Plane.get_trapezoid_centroid(x2, middle_height, tail_len)
         tail_area = Plane.get_trapezoid_area(x2, middle_height, tail_len)
         nose_com = Plane.get_trapezoid_centroid(middle_height, x1, nose_len)
@@ -261,7 +258,7 @@ def calc_distance_travelled(*parameters, max_attempts=3, init_duration=10, times
 if __name__ == "__main__":
     duration = 8
     t = np.linspace(0, duration, 1001)
-    sim = PlaneSim(Plane.from_parameters(0.015, 0.05, 0.17))
+    sim = PlaneSim(Plane.from_parameters(0.01, 0.07, 0.17))
     sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
 
     # plane = Plane.from_parameters(0.018, 0.05, 0.17)
