@@ -36,12 +36,50 @@ class Plane:
         mass = density*PAPER_WIDTH*PAPER_LENGTH #paper mass (kg)
 
         x4 = cls.get_tail_edge(x1, x3, PAPER_WIDTH)
-        wing = (PAPER_WIDTH*x3)/2 - (1/2)*((PAPER_WIDTH/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
+        wing = cls.get_wing_area(x1, x2, x3, x4)
         cop = cls.get_centre_of_pressure(x1, x2, x3, x4, PAPER_WIDTH)
-        return cls(wing_area=wing, mass=mass, inertia=x3, cop=cop)
+        com = cls.get_centre_of_mass(x1, x2, x3, x4, PAPER_WIDTH, PAPER_LENGTH)
+        return cls(wing_area=wing, mass=mass, inertia=x3, cop=cop - com)
+
+    @classmethod
+    def get_wing_area(cls, x1, x2, x3, x4):
+        return (PAPER_WIDTH*x3)/2 - (1/2)*((PAPER_WIDTH/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
 
     @staticmethod
-    def get_tail_edge(x1, x3, w):
+    def get_centre_of_mass(x1, x2, x3, x4, w, l) -> np.ndarray:
+        tail_len = 2*x3 - l
+        nose_len = l - x3
+        assert 0 < tail_len, f"Length of plane ({l}) is too small: there won't be a tail!. x3 ({x3}) must be at least {l/2}"
+        len_ratio = tail_len/l
+        middle_height = len_ratio*x2 + (1-len_ratio)*x1
+        tail_wing_com = [tail_len/2, np.mean([x2, middle_height])]
+        wing_area_ratio = tail_len * (w/2 - x2) / ((w/2 - x2) * nose_len / 2) # Tail wing area / nose wing area
+        wing = Plane.get_wing_area(x1, x2, x3, x4)
+        tail_wing_area = wing / (1 + wing_area_ratio)
+        nose_wing_com = [tail_len + nose_len/3, 2*middle_height/3 + x1/3]
+        nose_wing_area = wing - tail_wing_area
+        tail_com = Plane.get_trapezoid_centroid(x2, middle_height, tail_len)
+        tail_area = Plane.get_trapezoid_area(x2, middle_height, tail_len)
+        nose_com = Plane.get_trapezoid_centroid(middle_height, x1, nose_len)
+        nose_area = Plane.get_trapezoid_area(middle_height, x1, nose_len)
+        return np.average(
+            np.vstack([tail_wing_com, nose_wing_com, tail_com, nose_com]),
+            axis=0,
+            weights=[2*tail_wing_area, 10*nose_wing_area, 2*tail_area, 10*nose_area]
+        )
+
+    @staticmethod
+    def get_trapezoid_area(h1, h2, l) -> float:
+        return l*(h1 + h2)/2
+
+    @staticmethod
+    def get_trapezoid_centroid(h1, h2, l) -> np.ndarray:
+        x = l/3 * (h1 + 2*h2)/(h1 + h2)
+        y = (h1 + h2)/3
+        return np.asarray([x, y])
+
+    @staticmethod
+    def get_tail_edge(x1, x3, w) -> float:
         l1 = w/2 - x1
         alpha = Plane.get_alpha(x1, w)
         x4 = x3 - l1/np.tan(alpha)
