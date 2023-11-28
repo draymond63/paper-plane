@@ -39,11 +39,17 @@ class Plane:
         wing = cls.get_wing_area(x1, x2, x3, x4)
         cop = cls.get_centre_of_pressure(x1, x2, x3, x4, PAPER_WIDTH)
         com = cls.get_centre_of_mass(x1, x2, x3, x4, PAPER_WIDTH, PAPER_LENGTH)
-        return cls(wing_area=wing, mass=mass, inertia=x3, cop=cop - com)
+        inertia = cls.get_inertia(x1, x2, x3, mass)
+        return cls(wing_area=wing, mass=mass, inertia=inertia, cop=cop - com)
 
-    @classmethod
-    def get_wing_area(cls, x1, x2, x3, x4):
+    @staticmethod
+    def get_wing_area(x1, x2, x3, x4):
         return (PAPER_WIDTH*x3)/2 - (1/2)*((PAPER_WIDTH/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
+
+    # TODO: Better approximation of the moment of inertia?
+    @staticmethod
+    def get_inertia(x1, x2, x3, m):
+        return m * (x3**2 + (np.mean([x1, x2]))**2) / 12
 
     @staticmethod
     def get_centre_of_mass(x1, x2, x3, x4, w, l) -> np.ndarray:
@@ -253,10 +259,9 @@ def calc_distance_travelled(*parameters, max_attempts=3, init_duration=10, times
 
 
 if __name__ == "__main__":
-    # duration = 8
-    # t = np.linspace(0, duration, 1001)
-    # sim = PlaneSim()
-    # sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
+    duration = 8
+    t = np.linspace(0, duration, 1001)
+    sim = PlaneSim(Plane.from_parameters(0.015, 0.05, 0.17))
+    sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
 
-    plane = Plane.from_parameters(0.018, 0.05, 0.17)
-    
+    # plane = Plane.from_parameters(0.018, 0.05, 0.17)
