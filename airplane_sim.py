@@ -1,11 +1,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import fsolve
 from scipy.integrate import solve_ivp
 from dataclasses import dataclass, field
 
 INCHES_TO_METRES = 0.0254
 PAPER_WIDTH = 8.5 * INCHES_TO_METRES
 PAPER_LENGTH = 11 * INCHES_TO_METRES
+
+
+
+def get_x1_bounds(x3: float, w=PAPER_WIDTH):
+    # Lower bound of x1 is dependent on x3
+    arccot = np.pi/2 - np.arctan(x3)
+    b = np.sin((np.pi - 4*arccot)/4)
+    lower_x = -(w * b)/(2*(1 - b))
+    # upper_x = w/4
+    upper_x = w/(2 + 2*np.sqrt(2))
+    return lower_x, upper_x
+
+def get_x2_bounds(w=PAPER_WIDTH):
+    return 0, w/2
+
+def get_x3_bounds(w=PAPER_WIDTH, l=PAPER_LENGTH):
+    return l/2, l - w/2
+
 
 
 def as_vector(x=None, y=None, magnitude=None, angle=None):
@@ -29,6 +48,7 @@ class Plane:
 
     @classmethod
     def from_parameters(cls, x1, x2, x3, density=0.080):
+        assert 0 < density, f"Density ({density}) must be positive"
         assert 0 < x3 <= PAPER_LENGTH, f"x3 ({x3}) must be less than the length of the paper ({PAPER_LENGTH})"
         assert 0 <= x1 <= PAPER_WIDTH/2, f"x1 ({x1}) must be postive and less than half the width of the paper ({PAPER_WIDTH/2})"
         # NOTE: does wing area assume wings are flat? What about angle of wing relative to the plane? This affects moment of inertia
@@ -38,11 +58,13 @@ class Plane:
         cop = cls.get_centre_of_pressure(x1, x2, x3, x4, PAPER_WIDTH)
         com = cls.get_centre_of_mass(x1, x2, x3, wing, PAPER_WIDTH, PAPER_LENGTH)
         inertia = cls.get_inertia(x1, x2, x3, mass)
+        assert np.all(np.array([x4, wing, inertia]) >= 0), f"x4, wing area, and inertia must be positive (x4: {x4}, wing: {wing}, inertia: {inertia}))"
         return cls(wing_area=wing, mass=mass, inertia=inertia, cop=cop - com)
 
     @staticmethod
     def get_wing_area(x1, x2, x3, x4):
-        return (PAPER_WIDTH*x3)/2 - (1/2)*((PAPER_WIDTH/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
+        area = (PAPER_WIDTH*x3)/2 - (1/2)*((PAPER_WIDTH/2)-x1)*(x3-x4) -x3*((x1+x2)/2)
+        return max(area, 0)
 
     # TODO: Better approximation of the moment of inertia?
     @staticmethod
@@ -53,14 +75,19 @@ class Plane:
     def get_centre_of_mass(x1, x2, x3, wing_area, w, l) -> np.ndarray:
         tail_len = 2*x3 - l
         nose_len = l - x3
-        assert 0 < tail_len, f"Length of plane ({l}) is too small: there won't be a tail!. x3 ({x3}) must be at least {l/2}"
+        assert 0 <= tail_len, f"Length of plane ({l}) is too small: there won't be a tail!. x3 ({x3}) must be at least {l/2}"
         len_ratio = tail_len/l
         middle_height = len_ratio*x2 + (1-len_ratio)*x1
         tail_wing_com = [tail_len/2, np.mean([x2, middle_height])]
-        wing_area_ratio = tail_len * (w/2 - x2) / ((w/2 - x2) * nose_len / 2) # Tail wing area / nose wing area
-        tail_wing_area = wing_area / (1 + wing_area_ratio)
         nose_wing_com = [tail_len + nose_len/3, 2*middle_height/3 + x1/3]
-        nose_wing_area = wing_area - tail_wing_area
+        nose_wing_area = (w/2 - x2) * nose_len / 2
+        tail_wing_area = tail_len * (w/2 - x2)
+        if nose_wing_area + tail_wing_area == 0: # If both approx areas are 0, assume they are equal 
+            nose_wing_area, tail_wing_area = wing_area/2, wing_area/2
+        else:
+            tail_wing_ratio = tail_wing_area / (nose_wing_area + tail_wing_area)
+            tail_wing_area = tail_wing_ratio * wing_area
+            nose_wing_area = wing_area - tail_wing_area
         tail_com = Plane.get_trapezoid_centroid(x2, middle_height, tail_len)
         tail_area = Plane.get_trapezoid_area(x2, middle_height, tail_len)
         nose_com = Plane.get_trapezoid_centroid(middle_height, x1, nose_len)
@@ -77,18 +104,21 @@ class Plane:
 
     @staticmethod
     def get_trapezoid_centroid(h1, h2, l) -> np.ndarray:
+        if h1 + h1 == 0:
+            return np.asarray([l/2, 0])
         x = l/3 * (h1 + 2*h2)/(h1 + h2)
         y = (h1 + h2)/3
         return np.asarray([x, y])
 
     @staticmethod
-    def get_tail_edge(x1, x3, w) -> float:
+    def get_tail_edge(x1, x3, w, atol=1e3) -> float:
         l1 = w/2 - x1
         alpha = Plane.get_alpha(x1, w)
         x4 = x3 - l1/np.tan(alpha)
-        assert 0 <= x4, f"Length of plane ({x3}) is too small: there won't be a tail edge!. Must be at least {l1/np.tan(alpha)} for the current x1 ({x1})"
-        assert x4 <= x3, f"Tail edge ({x4:5f}) must be less than the length of the plane ({x3})."
-        return x4
+        assert x4 <= x3 + atol, f"Tail edge ({x4:5f}) must be less than the length of the plane ({x3})."
+        if x4 < -atol:
+            raise ValueError(f"Length of plane ({x3}) is too small: there won't be a tail edge!. Must be at least {l1/np.tan(alpha)} for the current x1 ({x1})")
+        return max(x4, 0)
 
     @staticmethod
     def get_centre_of_pressure(x1, x2, x3, x4, w):
@@ -111,7 +141,6 @@ class Plane:
         yp = x1 + xp_inv*np.tan(theta)
         # xp_inv is now rotated, but relative to the nose, not the tail
         xp = x3 - xp_inv
-        # TODO: Subtract COM coordinates
         return [xp, yp]
 
     @staticmethod
@@ -125,12 +154,12 @@ class Plane:
 
 
 class PlaneSim:
-    def __init__(self, plane=Plane(), g=9.81, air_density=1.225) -> None:
+    def __init__(self, plane=Plane(), g=9.81, CL=1, CD=1, air_density=1.225) -> None:
         self.plane = plane
         self.g = g  # gravity, m/s^2
         self.rho = air_density  # air density, kg/m^3
-        self.CL_alpha = 2 * np.pi  # lift coefficient per radian
-        self.CD = 0.01 / (np.pi * 2)  # drag coefficient per radian
+        self.CL_alpha = CL * 2 * np.pi  # lift coefficient per radian
+        self.CD = CD / (2 * np.pi)  # drag coefficient per radian
         self.critical_angle = np.deg2rad(90)  # critical angle of attack, radians
         self.Fg = as_vector(0, self.plane.mass * -self.g) # Force of gravity
         self.cop_angle_plane = np.arctan2(self.plane.cop[1], self.plane.cop[0])
@@ -237,7 +266,7 @@ class PlaneSim:
         plt.show()
 
 
-def calc_distance_travelled(*parameters, max_attempts=3, init_duration=10, timestep=0.01, height=2, **flight_params):
+def calc_distance_travelled(*parameters, max_attempts=5, init_duration=10, timestep=0.01, height=2, **flight_params):
     attempts = 0
     plane = Plane.from_parameters(*parameters)
     duration = init_duration
@@ -256,9 +285,12 @@ def calc_distance_travelled(*parameters, max_attempts=3, init_duration=10, times
 
 
 if __name__ == "__main__":
-    duration = 8
+    duration = 70
     t = np.linspace(0, duration, 1001)
-    sim = PlaneSim(Plane.from_parameters(0.01, 0.07, 0.17))
+    sim = PlaneSim(Plane.from_parameters(0.04334, 0.08396, 0.13970))
+    # 0.044, 0.072, 0.140 -> 25.969
+    # 0.042, 0.084, 0.140 -> 48.628
+    # 0.042, 0.096, 0.140 -> 327.356
     sim.plot(sim.run(t, height=2, must_land=False), with_forces=True)
 
     # plane = Plane.from_parameters(0.018, 0.05, 0.17)
