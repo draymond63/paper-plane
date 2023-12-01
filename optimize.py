@@ -95,6 +95,7 @@ def wrapper_function(variables):
 def genetic_algorithm():
     try:
         #np.random.seed(0)
+        
         lower_x3, upper_x3 = get_x3_bounds()
         lower_x2, upper_x2 = get_x2_bounds()
 
