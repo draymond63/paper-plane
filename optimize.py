@@ -7,29 +7,9 @@ import time
 
 hyperparameter_sets = [
     {
-        'max_num_iteration': 30,
-        'population_size': 200,
-        'mutation_probability': 0.1,
-        'elit_ratio': 0.01,
-        'crossover_probability': 0.8,
-        'crossover_type': 'uniform',
-        'max_iteration_without_improv': None,
-        'parents_portion': 0.3
-    },
-    {
-        'max_num_iteration': 80,
-        'population_size': 150,
+        'max_num_iteration': 50,
+        'population_size': 100,
         'mutation_probability': 0.2,
-        'elit_ratio': 0.025,
-        'crossover_probability': 0.7,
-        'crossover_type': 'uniform',
-        'max_iteration_without_improv': None,
-        'parents_portion': 0.45
-    },
-    {
-        'max_num_iteration': 20,
-        'population_size': 50,
-        'mutation_probability': 0.1,
         'elit_ratio': 0.025,
         'crossover_probability': 0.8,
         'crossover_type': 'uniform',
@@ -48,10 +28,30 @@ hyperparameter_sets = [
     },
     {
         'max_num_iteration': 20,
+        'population_size': 150,
+        'mutation_probability': 0.1,
+        'elit_ratio': 0.01,
+        'crossover_probability': 0.5,
+        'crossover_type': 'uniform',
+        'max_iteration_without_improv': None,
+        'parents_portion': 0.3
+    },
+    {
+        'max_num_iteration': 13,
         'population_size': 120,
         'mutation_probability': 0.1,
-        'elit_ratio': 0.025,
-        'crossover_probability': 0.8,
+        'elit_ratio': 0.01,
+        'crossover_probability': 0.5,
+        'crossover_type': 'uniform',
+        'max_iteration_without_improv': None,
+        'parents_portion': 0.3
+    },
+    {
+        'max_num_iteration': 12,
+        'population_size': 200,
+        'mutation_probability': 0.1,
+        'elit_ratio': 0.01,
+        'crossover_probability': 0.5,
         'crossover_type': 'uniform',
         'max_iteration_without_improv': None,
         'parents_portion': 0.3
@@ -95,7 +95,7 @@ def wrapper_function(variables):
 def genetic_algorithm():
     try:
         #np.random.seed(0)
-        
+
         lower_x3, upper_x3 = get_x3_bounds()
         lower_x2, upper_x2 = get_x2_bounds()
 
@@ -107,9 +107,9 @@ def genetic_algorithm():
 
         # Set default hyperparameters
         algorithm_params = {
-            'max_num_iteration': 20,
-            'population_size': 120,
-            'mutation_probability': 0.1,
+            'max_num_iteration': 50,
+            'population_size': 100,
+            'mutation_probability': 0.2,
             'elit_ratio': 0.025,
             'crossover_probability': 0.8,
             'crossover_type': 'uniform',
