@@ -41,7 +41,7 @@ class Plane:
     wing_area: float = 0.01
     mass: float = 0.01 # Mass of the plane, kg
     inertia: float = 0.0001 # Moment of inertia, kg*m^2
-    frontal_area: float = 0.0001 # Frontal area of the plane, m^2
+    frontal_area: float = 0.001 # Frontal area of the plane, m^2
     # CoP at [0.01, 0.1] is CRACKED
     cop: np.ndarray = field(default_factory=lambda: np.asarray([0.01, 1]))
     "Center of pressure, relative to the center of mass. Positive x is forward, positive y is up"
@@ -154,7 +154,7 @@ class Plane:
 
 
 class PlaneSim:
-    def __init__(self, plane=Plane(), g=9.81, CL=1, CD=1, air_density=1.225) -> None:
+    def __init__(self, plane=Plane(), g=9.81, CL=1, CD=3, air_density=1.225) -> None:
         self.plane = plane
         self.g = g  # gravity, m/s^2
         self.rho = air_density  # air density, kg/m^3
@@ -235,7 +235,7 @@ class PlaneSim:
         solution = solve_ivp(self._ode, (0, duration), initial_conditions, t_eval=t)
         return solution.y
 
-    def plot(self, results, with_forces=False, with_angle=True):
+    def plot(self, results, with_forces=False, shift_drag=0, with_angle=True):
         x, y, vx, vy, alpha, omega = results
         below_ground = np.where(y <= 0)[0]
         if len(below_ground) == 0:
@@ -256,7 +256,7 @@ class PlaneSim:
             attack_angle = alpha - motion_angle
             lift, drag = self.calc_pressure_forces(speed, motion_angle, attack_angle)
             plt.quiver(x[:t_end], y[:t_end], lift[0][:t_end], lift[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='r')
-            plt.quiver(x[:t_end], y[:t_end] + 0.2, drag[0][:t_end], drag[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='b')
+            plt.quiver(x[:t_end], y[:t_end] + shift_drag, drag[0][:t_end], drag[1][:t_end], width=0.001, angles='xy', scale_units='xy', color='b')
             legend.extend(['Lift', 'Drag'])
         plt.title('Paper Airplane Flight')
         plt.xlabel('Distance (m)')
