@@ -5,6 +5,10 @@ from geneticalgorithm import geneticalgorithm as ga
 import matplotlib.pyplot as plt
 import time
 
+lower_x3, upper_x3 = get_x3_bounds()
+lower_x2, upper_x2 = get_x2_bounds()
+
+
 hyperparameter_sets = [
     {
         'max_num_iteration': 50,
@@ -93,50 +97,50 @@ def wrapper_function(variables):
         return np.inf
 
 def genetic_algorithm():
-    try:
-        #np.random.seed(0)
+    # try:
+    #np.random.seed(0)
 
-        lower_x3, upper_x3 = get_x3_bounds()
-        lower_x2, upper_x2 = get_x2_bounds()
+    lower_x3, upper_x3 = get_x3_bounds()
+    lower_x2, upper_x2 = get_x2_bounds()
 
-        # Variable bounds for each variable 
-        # From our constraints, x1 is smaller than W/(2+2√2) [where W is the width of the paper in meters]
-        # From our calculations, 0.044714354 is the upper limit and the lower limit is set as 0 
-        # [since a negative length isn't possible]
-        varbound = np.array([[0, 0.044714354], [lower_x2, upper_x2], [lower_x3, upper_x3]])  
+    # Variable bounds for each variable 
+    # From our constraints, x1 is smaller than W/(2+2√2) [where W is the width of the paper in meters]
+    # From our calculations, 0.044714354 is the upper limit and the lower limit is set as 0 
+    # [since a negative length isn't possible]
+    varbound = np.array([[0, 0.044714354], [lower_x2, upper_x2], [lower_x3, upper_x3]])  
 
-        # Set default hyperparameters
-        algorithm_params = {
-            'max_num_iteration': 50,
-            'population_size': 100,
-            'mutation_probability': 0.2,
-            'elit_ratio': 0.025,
-            'crossover_probability': 0.8,
-            'crossover_type': 'uniform',
-            'max_iteration_without_improv': None,
-            'parents_portion': 0.3
-        }
-        model = ga(function=wrapper_function, dimension=3, variable_type='real', variable_boundaries=varbound,
-               function_timeout=10, algorithm_parameters=algorithm_params)
+    # Set default hyperparameters
+    algorithm_params = {
+        'max_num_iteration': 50,
+        'population_size': 100,
+        'mutation_probability': 0.2,
+        'elit_ratio': 0.025,
+        'crossover_probability': 0.8,
+        'crossover_type': 'uniform',
+        'max_iteration_without_improv': None,
+        'parents_portion': 0.3
+    }
+    model = ga(function=wrapper_function, dimension=3, variable_type='real', variable_boundaries=varbound,
+            function_timeout=10, algorithm_parameters=algorithm_params)
 
-        start_time = time.time()
-        print("Start Time: ", start_time)
-        # Run the optimization
-        model.run()
-        end_time = time.time()
-        print("End Time: ", end_time)
+    start_time = time.time()
+    print("Start Time: ", start_time)
+    # Run the optimization
+    model.run()
+    end_time = time.time()
+    print("End Time: ", end_time)
 
-        # Results
-        solution = model.output_dict
-        optimized_variables = solution['variable']
-        optimized_objective = -solution['function']
+    # Results
+    solution = model.output_dict
+    optimized_variables = solution['variable']
+    optimized_objective = -solution['function']
 
-        print("Optimized Variables:", optimized_variables)
-        print("Optimized Objective:", optimized_objective)
-        return solution, optimized_variables, optimized_objective, start_time, end_time
-    except Exception as e:
-        print(f"An error occurred during optimization: {e}")
-        return None, None, None, None, None
+    print("Optimized Variables:", optimized_variables)
+    print("Optimized Objective:", optimized_objective)
+    return solution, optimized_variables, optimized_objective, start_time, end_time
+    # except Exception as e:
+    #     print(f"An error occurred during optimization: {e}")
+    #     return None, None, None, None, None
 
 def test_accuracy(model, optimized_objective, start_time, end_time):
 
@@ -164,13 +168,11 @@ def test_accuracy(model, optimized_objective, start_time, end_time):
 
 
 if __name__ == "__main__":
-    lower_x3, upper_x3 = get_x3_bounds()
-    lower_x2, upper_x2 = get_x2_bounds()
-
     # TO FIND ITERATIVE SOLUTION, UNCOMMENT
     #find_max_iteratively()
 
     solution, optimized_variables, optimized_objective, start_time, end_time = genetic_algorithm()
+    print(solution)
 
     #test_accuracy(solution, optimized_objective, start_time, end_time)
 
