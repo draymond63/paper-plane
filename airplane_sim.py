@@ -266,9 +266,12 @@ class PlaneSim:
         plt.show()
 
 
-def calc_distance_travelled(*parameters, max_attempts=5, init_duration=10, timestep=0.01, height=2, **flight_params):
+def calc_distance_travelled(*parameters, ignore_unstable=False, max_attempts=5, init_duration=10, timestep=0.01, height=2, **flight_params):
     attempts = 0
     plane = Plane.from_parameters(*parameters)
+    # Forward CoP relative to the CoM means the plane will be laterally unstable. No point in simulating
+    if plane.cop[0] > 0 and not ignore_unstable:
+        return 0
     duration = init_duration
     while attempts < max_attempts:
         attempts += 1
